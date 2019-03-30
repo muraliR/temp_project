@@ -2,7 +2,7 @@ var express = require('express');
 var router = express.Router();
 var config = require('../../config');
 var Schema = require('../../schema');
-
+var geoip = require('geoip-lite');
 
 var EmailComplaint = require('../../models/email_complaint');
 
@@ -22,7 +22,7 @@ router.post('/ses_email_activity', function(req, res, next) {
 	    		// Update admin
 	    		// print to error log
 	    		console.log("finding messageId from email table failed");
-
+	    		return res.send({}).status(200)
 	    	} else {
 	    		if(result.length != 0){
 	    			var email_log_obj = result[0];
@@ -47,13 +47,16 @@ router.post('/ses_email_activity', function(req, res, next) {
 						ip_address = message['click']['ipAddress']
 						link = message['click']['link']
 
-						els_insert_sql = "INSERT INTO email_status_logs (email_log_id, api_time, email_template_id, version_id, event_type, campaign_id,created_at,updated_at,user_agent,ip_address,link) VALUES ("+email_log_id+",'"+api_time+"',"+email_template_id+","+version_id+",'"+event_type+"',"+campaign_id+",'"+created_at+"','"+updated_at+"','"+user_agent+"','"+ip_address+"','"+link+"')";	
+						var geo = geoip.lookup(ip_address);
+
+						els_insert_sql = "INSERT INTO email_status_logs (email_log_id, api_time, email_template_id, version_id, event_type, campaign_id,created_at,updated_at,user_agent,ip_address,link,country) VALUES ("+email_log_id+",'"+api_time+"',"+email_template_id+","+version_id+",'"+event_type+"',"+campaign_id+",'"+created_at+"','"+updated_at+"','"+user_agent+"','"+ip_address+"','"+link+"','"+ geo['country'] +"')";	
 					}
 
 
 					Schema.mysql_connection.query(els_insert_sql, function (err, result) {
 					    if (err){
 					    	console.log( "Error inserting into email_status_logs table");
+					    	return res.send({}).status(200)
 					    } else {
 
 					    	if(event_type == "Bounce"){
@@ -67,8 +70,10 @@ router.post('/ses_email_activity', function(req, res, next) {
 					    		}
 					    	}
 
-					    	// TODO GEOCODER
-					    	
+
+
+							country_update_sql = "update email_status_logs set country = '"+geo['country']+"' where id = " + email_log_obj["id"];
+							//geo['country']
 
 
 					    	email_log_update_sql = "update email_logs set status = '"+event_type+"' where id = " + email_log_obj["id"];
@@ -76,13 +81,16 @@ router.post('/ses_email_activity', function(req, res, next) {
 					    	Schema.mysql_connection.query(email_log_update_sql, function (err, result) {
 							    if (err){
 							    	console.log( "Error updating into email_logs table");
+							    	return res.send({}).status(200)
 							    } else {
 							    	console.log("Updated in email_logs table")
-							    	res.send({success:true, result: els_insert_sql}).status(200)
+							    	return res.send({success:true, result: els_insert_sql}).status(200)
 							    }
-							  });
+							 });
 					    }
 					 });
+	    		} else {
+	    			return res.send({}).status(200)
 	    		}
 	    	}
 	    	
@@ -91,7 +99,7 @@ router.post('/ses_email_activity', function(req, res, next) {
 
 	} else {
 		// TODO to handle
-		res.send({}).status(200)
+		return res.send({}).status(200)
 	}
 
 	
